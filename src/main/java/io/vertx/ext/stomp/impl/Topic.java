@@ -62,7 +62,10 @@ public class Topic implements Destination {
   @Override
   public synchronized Destination dispatch(StompServerConnection connection, Frame frame) {
     for (Subscription subscription : subscriptions) {
-      String messageId = UUID.randomUUID().toString();
+      String messageId = frame.getHeaders().get(Frame.MESSAGE_ID);
+      if (messageId == null || messageId.trim().length() == 0) {
+        messageId = UUID.randomUUID().toString();
+      }
       Frame message = transform(frame, subscription, messageId);
       subscription.connection.write(message);
     }
@@ -71,16 +74,16 @@ public class Topic implements Destination {
 
   public static Frame transform(Frame frame, Subscription subscription, String messageId) {
     final Headers headers = Headers.create(frame.getHeaders())
-        // Destination already set in the input headers.
-        .add(Frame.SUBSCRIPTION, subscription.id)
-        .add(Frame.MESSAGE_ID, messageId);
+      // Destination already set in the input headers.
+      .add(Frame.SUBSCRIPTION, subscription.id)
+      .add(Frame.MESSAGE_ID, messageId);
     if (!subscription.ackMode.equals("auto")) {
       // We reuse the message Id as ack Id
       headers.add(Frame.ACK, messageId);
     }
     return new Frame(Frame.Command.MESSAGE,
-        headers,
-        frame.getBody());
+      headers,
+      frame.getBody());
   }
 
   /**
@@ -130,9 +133,9 @@ public class Topic implements Destination {
   @Override
   public synchronized Destination unsubscribeConnection(StompServerConnection connection) {
     new ArrayList<>(subscriptions)
-        .stream()
-        .filter(subscription -> subscription.connection.equals(connection))
-        .forEach(subscriptions::remove);
+      .stream()
+      .filter(subscription -> subscription.connection.equals(connection))
+      .forEach(subscriptions::remove);
 
     if (subscriptions.isEmpty()) {
       vertx.sharedData().getLocalMap("stomp.destinations").remove(this);
@@ -173,9 +176,9 @@ public class Topic implements Destination {
   @Override
   public synchronized List<String> getSubscriptions(StompServerConnection connection) {
     return subscriptions.stream()
-        .filter(subscription -> subscription.connection.equals(connection))
-        .map(s -> s.id)
-        .collect(Collectors.toList());
+      .filter(subscription -> subscription.connection.equals(connection))
+      .map(s -> s.id)
+      .collect(Collectors.toList());
   }
 
   /**

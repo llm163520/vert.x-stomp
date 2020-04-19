@@ -109,7 +109,7 @@ public class EventBusBridge extends Topic {
   public synchronized boolean unsubscribe(StompServerConnection connection, Frame frame) {
     for (Subscription subscription : new ArrayList<>(subscriptions)) {
       if (subscription.connection.equals(connection)
-          && subscription.id.equals(frame.getId())) {
+        && subscription.id.equals(frame.getId())) {
 
         boolean r = subscriptions.remove(subscription);
         Optional<Subscription> any = subscriptions.stream().filter(s -> s.destination.equals(subscription.destination)).findAny();
@@ -135,34 +135,36 @@ public class EventBusBridge extends Topic {
   @Override
   public synchronized Destination unsubscribeConnection(StompServerConnection connection) {
     new ArrayList<>(subscriptions)
-        .stream()
-        .filter(subscription -> subscription.connection.equals(connection))
-        .forEach(s -> {
-          subscriptions.remove(s);
-          Optional<Subscription> any = subscriptions.stream().filter(s2 -> s2.destination.equals(s.destination))
-              .findAny();
-          // We unregister the event bus consumer if there are no subscription on this address anymore.
-          if (!any.isPresent()) {
-            MessageConsumer<?> consumer = registry.remove(s.destination);
-            if (consumer != null) {
-              consumer.unregister();
-            }
+      .stream()
+      .filter(subscription -> subscription.connection.equals(connection))
+      .forEach(s -> {
+        subscriptions.remove(s);
+        Optional<Subscription> any = subscriptions.stream().filter(s2 -> s2.destination.equals(s.destination))
+          .findAny();
+        // We unregister the event bus consumer if there are no subscription on this address anymore.
+        if (!any.isPresent()) {
+          MessageConsumer<?> consumer = registry.remove(s.destination);
+          if (consumer != null) {
+            consumer.unregister();
           }
-        });
+        }
+      });
     return this;
   }
 
   private Frame transform(Message<Object> msg, Subscription subscription) {
-    String messageId = UUID.randomUUID().toString();
-
+    String messageId = msg.headers().get(Frame.MESSAGE_ID);
+    if (messageId == null || messageId.trim().length() == 0) {
+      messageId = UUID.randomUUID().toString();
+    }
     Frame frame = new Frame();
     frame.setCommand(Frame.Command.MESSAGE);
 
     final Headers headers = Headers.create(frame.getHeaders())
-        // Destination already set in the input headers.
-        .add(Frame.SUBSCRIPTION, subscription.id)
-        .add(Frame.MESSAGE_ID, messageId)
-        .add(Frame.DESTINATION, msg.address());
+      // Destination already set in the input headers.
+      .add(Frame.SUBSCRIPTION, subscription.id)
+      .add(Frame.MESSAGE_ID, messageId)
+      .add(Frame.DESTINATION, msg.address());
     if (!"auto".equals(subscription.ackMode)) {
       // We reuse the message Id as ack Id
       headers.add(Frame.ACK, messageId);
@@ -217,14 +219,14 @@ public class EventBusBridge extends Topic {
           if (res.failed()) {
             Throwable cause = res.cause();
             connection.write(Frames.createErrorFrame("Message dispatch error", Headers.create(Frame.DESTINATION,
-                address, "reply-address", replyAddress), cause.getMessage())).close();
+              address, "reply-address", replyAddress), cause.getMessage())).close();
           } else {
             // We are in a request-response interaction, only one STOMP client must receive the message (the one
             // having sent the given frame).
             // We look for the subscription with registered to the 'reply-to' destination. It must be unique.
             Optional<Subscription> subscription = subscriptions.stream()
-                .filter(s -> s.connection.equals(connection) && s.destination.equals(replyAddress))
-                .findFirst();
+              .filter(s -> s.connection.equals(connection) && s.destination.equals(replyAddress))
+              .findFirst();
             if (subscription.isPresent()) {
               Frame stompFrame = transform(res.result(), subscription.get());
               subscription.get().connection.write(stompFrame);
@@ -236,7 +238,7 @@ public class EventBusBridge extends Topic {
       }
     } else {
       connection.write(Frames.createErrorFrame("Access denied", Headers.create(Frame.DESTINATION,
-          address), "Access denied to " + address)).close();
+        address), "Access denied to " + address)).close();
       return null;
     }
     return this;
@@ -245,11 +247,11 @@ public class EventBusBridge extends Topic {
   private void send(String address, Frame frame, Handler<AsyncResult<Message<Object>>> replyHandler) {
     if (options.isPointToPoint()) {
       vertx.eventBus().send(address, frame.getBody(),
-          new DeliveryOptions().setHeaders(toMultimap(frame.getHeaders())), replyHandler);
+        new DeliveryOptions().setHeaders(toMultimap(frame.getHeaders())), replyHandler);
     } else {
       // the reply handler is ignored in non point to point interaction.
       vertx.eventBus().publish(address, frame.getBody(),
-          new DeliveryOptions().setHeaders(toMultimap(frame.getHeaders())));
+        new DeliveryOptions().setHeaders(toMultimap(frame.getHeaders())));
     }
   }
 
@@ -274,6 +276,7 @@ public class EventBusBridge extends Topic {
    * @param address the address
    * @return {@code true} if it matches, {@code false} otherwise.
    */
+  @Override
   public boolean matches(String address) {
     return checkMatches(false, address, null) || checkMatches(true, address, null);
   }
